@@ -6,10 +6,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-async function sleep(): Promise<void> {
-	await new Promise((resolve) => setTimeout(resolve, 500));
-}
-
 export class File implements vscode.FileStat {
 	type: vscode.FileType;
 	ctime: number;
@@ -54,14 +50,12 @@ export class MemFS implements vscode.FileSystemProvider {
 
 	// --- manage file metadata
 
-	async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
-		await sleep();
+	stat(uri: vscode.Uri): vscode.FileStat {
 		return this._lookup(uri, false);
 	}
 
-	async readDirectory(uri: vscode.Uri): Promise<[string, vscode.FileType][]> {
-		await sleep();
-		const entry = await this._lookupAsDirectory(uri, false);
+	readDirectory(uri: vscode.Uri): [string, vscode.FileType][] {
+		const entry = this._lookupAsDirectory(uri, false);
 		const result: [string, vscode.FileType][] = [];
 		for (const [name, child] of entry.entries) {
 			result.push([name, child.type]);
@@ -71,22 +65,21 @@ export class MemFS implements vscode.FileSystemProvider {
 
 	// --- manage file contents
 
-	async readFile(uri: vscode.Uri): Promise<Uint8Array> {
-		await sleep();
-		const data = (await this._lookupAsFile(uri, false)).data;
+	readFile(uri: vscode.Uri): Uint8Array {
+		const data = this._lookupAsFile(uri, false).data;
 		if (data) {
 			return data;
 		}
 		throw vscode.FileSystemError.FileNotFound();
 	}
 
-	async writeFile(
+	writeFile(
 		uri: vscode.Uri,
 		content: Uint8Array,
 		options: { create: boolean; overwrite: boolean }
-	): Promise<void> {
+	): void {
 		const basename = path.posix.basename(uri.path);
-		const parent = await this._lookupParentDirectory(uri);
+		const parent = this._lookupParentDirectory(uri);
 		let entry = parent.entries.get(basename);
 		if (entry instanceof Directory) {
 			throw vscode.FileSystemError.FileIsADirectory(uri);
@@ -111,19 +104,19 @@ export class MemFS implements vscode.FileSystemProvider {
 
 	// --- manage files/folders
 
-	async rename(
+	rename(
 		oldUri: vscode.Uri,
 		newUri: vscode.Uri,
 		options: { overwrite: boolean }
-	): Promise<void> {
-		if (!options.overwrite && (await this._lookup(newUri, true))) {
+	): void {
+		if (!options.overwrite && this._lookup(newUri, true)) {
 			throw vscode.FileSystemError.FileExists(newUri);
 		}
 
-		const entry = await this._lookup(oldUri, false);
-		const oldParent = await this._lookupParentDirectory(oldUri);
+		const entry = this._lookup(oldUri, false);
+		const oldParent = this._lookupParentDirectory(oldUri);
 
-		const newParent = await this._lookupParentDirectory(newUri);
+		const newParent = this._lookupParentDirectory(newUri);
 		const newName = path.posix.basename(newUri.path);
 
 		oldParent.entries.delete(entry.name);
@@ -136,10 +129,10 @@ export class MemFS implements vscode.FileSystemProvider {
 		);
 	}
 
-	async delete(uri: vscode.Uri): Promise<void> {
+	delete(uri: vscode.Uri): void {
 		const dirname = uri.with({ path: path.posix.dirname(uri.path) });
 		const basename = path.posix.basename(uri.path);
-		const parent = await this._lookupAsDirectory(dirname, false);
+		const parent = this._lookupAsDirectory(dirname, false);
 		if (!parent.entries.has(basename)) {
 			throw vscode.FileSystemError.FileNotFound(uri);
 		}
@@ -152,10 +145,10 @@ export class MemFS implements vscode.FileSystemProvider {
 		);
 	}
 
-	async createDirectory(uri: vscode.Uri): Promise<void> {
+	createDirectory(uri: vscode.Uri): void {
 		const basename = path.posix.basename(uri.path);
 		const dirname = uri.with({ path: path.posix.dirname(uri.path) });
-		const parent = await this._lookupAsDirectory(dirname, false);
+		const parent = this._lookupAsDirectory(dirname, false);
 
 		const entry = new Directory(basename);
 		parent.entries.set(entry.name, entry);
@@ -169,10 +162,9 @@ export class MemFS implements vscode.FileSystemProvider {
 
 	// --- lookup
 
-	private async _lookup(uri: vscode.Uri, silent: false): Promise<Entry>;
-	private async _lookup(uri: vscode.Uri, silent: boolean): Promise<Entry | undefined>;
-	private async _lookup(uri: vscode.Uri, silent: boolean): Promise<Entry | undefined> {
-		await sleep();
+	private _lookup(uri: vscode.Uri, silent: false): Entry;
+	private _lookup(uri: vscode.Uri, silent: boolean): Entry | undefined;
+	private _lookup(uri: vscode.Uri, silent: boolean): Entry | undefined {
 		const parts = uri.path.split('/');
 		let entry: Entry = this.root;
 		for (const part of parts) {
@@ -195,26 +187,25 @@ export class MemFS implements vscode.FileSystemProvider {
 		return entry;
 	}
 
-	private async _lookupAsDirectory(uri: vscode.Uri, silent: boolean): Promise<Directory> {
-		const entry = await this._lookup(uri, silent);
+	private _lookupAsDirectory(uri: vscode.Uri, silent: boolean): Directory {
+		const entry = this._lookup(uri, silent);
 		if (entry instanceof Directory) {
 			return entry;
 		}
 		throw vscode.FileSystemError.FileNotADirectory(uri);
 	}
 
-	private async _lookupAsFile(uri: vscode.Uri, silent: boolean): Promise<File> {
-        await sleep();
-		const entry = await this._lookup(uri, silent);
+	private _lookupAsFile(uri: vscode.Uri, silent: boolean): File {
+		const entry = this._lookup(uri, silent);
 		if (entry instanceof File) {
 			return entry;
 		}
 		throw vscode.FileSystemError.FileIsADirectory(uri);
 	}
 
-	private async _lookupParentDirectory(uri: vscode.Uri): Promise<Directory> {
+	private _lookupParentDirectory(uri: vscode.Uri): Directory {
 		const dirname = uri.with({ path: path.posix.dirname(uri.path) });
-		return await this._lookupAsDirectory(dirname, false);
+		return this._lookupAsDirectory(dirname, false);
 	}
 
 	// --- manage file events
